@@ -121,7 +121,7 @@ def process_coral_hsv(image_path):
     
 
     # ---------------------------------------------------------
-    # Step 3: Noise Reduction (Morphology)
+    # Step 3: Noise Reduction
     # ---------------------------------------------------------
     kernel = np.ones((8, 8), np.uint8)
     cleaned_mask = cv2.morphologyEx(binary_mask, cv2.MORPH_OPEN, kernel)
@@ -364,119 +364,10 @@ def calibrate_hsv(image_path):
 
     cv2.destroyAllWindows()
 
-def process_coral_backprojection(image_path):
-    # ---------------------------------------------------------
-    # 1. Load the Image
-    # ---------------------------------------------------------
-    img = cv2.imread(image_path)
-    if img is None:
-        print(f"Error: Could not load image at {image_path}")
-        return
-
-    img_resized = cv2.resize(img, (1000, 750))
-    img_rgb = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
-    hsv_image = cv2.cvtColor(img_resized, cv2.COLOR_BGR2HSV)
-
-    # ---------------------------------------------------------
-    # Step 1: Interactive ROI Selection (The "Training" Data)
-    # ---------------------------------------------------------
-    print("A window will open. Click and drag to draw a box around ONE piece of dark coral.")
-    print("Make sure NOT to include the black grid or white tile in your box!")
-    print("Press ENTER or SPACE when done. Press 'c' to cancel.")
-    
-    # Open window to let user draw a bounding box
-    roi_coords = cv2.selectROI("Select Coral Sample", img_resized, showCrosshair=True, fromCenter=False)
-    cv2.destroyWindow("Select Coral Sample")
-    
-    # Extract the coordinates (x, y, width, height)
-    x, y, w, h = roi_coords
-    
-    # If the user didn't select anything, exit the script
-    if w == 0 or h == 0:
-        print("No sample selected. Exiting.")
-        return
-
-    # Crop the image to just the coral sample and convert to HSV
-    roi_crop = img_resized[y:y+h, x:x+w]
-    hsv_roi = cv2.cvtColor(roi_crop, cv2.COLOR_BGR2HSV)
-
-    # ---------------------------------------------------------
-    # Step 2: Calculate Histogram & Backproject
-    # ---------------------------------------------------------
-    roi_hist = cv2.calcHist([hsv_roi], [0, 1], None, [180, 256], [0, 180, 0, 256])
-    
-    # Normalize the histogram so values range from 0 to 255
-    cv2.normalize(roi_hist, roi_hist, 0, 255, cv2.NORM_MINMAX)
-    
-    # Apply Backprojection to the entire image using the sample's histogram
-    probability_map = cv2.calcBackProject([hsv_image], [0, 1], roi_hist, [0, 180, 0, 256], 1)
-
-    # Smooth the probability map using a circular filter 
-    disc_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    cv2.filter2D(probability_map, -1, disc_kernel, probability_map)
-
-    # ---------------------------------------------------------
-    # Step 3: Threshold to create Binary Mask
-    # ---------------------------------------------------------
-    _, binary_mask = cv2.threshold(probability_map, 50, 255, cv2.THRESH_BINARY)
-
-    # Cleanup the mask 
-    kernel = np.ones((5, 5), np.uint8)
-    cleaned_mask = cv2.morphologyEx(binary_mask, cv2.MORPH_OPEN, kernel)
-    cleaned_mask = cv2.morphologyEx(cleaned_mask, cv2.MORPH_CLOSE, kernel)
-
-    # ---------------------------------------------------------
-    # Step 4: Contours and Measurement
-    # ---------------------------------------------------------
-    contours, _ = cv2.findContours(cleaned_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    final_output = img_rgb.copy()
-    
-    for contour in contours:
-        area = cv2.contourArea(contour)
-        
-        # Area filter to ignore tiny specks
-        if area > 100: 
-            cv2.drawContours(final_output, [contour], -1, (0, 255, 0), 2)
-            
-            # Put area text
-            M = cv2.moments(contour)
-            if M["m00"] != 0:
-                cX = int(M["m10"] / M["m00"])
-                cY = int(M["m01"] / M["m00"])
-                cv2.putText(final_output, f"{int(area)}", (cX - 15, cY), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 0, 0), 1)
-
-    # ---------------------------------------------------------
-    # Display the Storyboard
-    # ---------------------------------------------------------
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-    fig.canvas.manager.set_window_title('Histogram Backprojection Pipeline')
-
-    axes[0, 0].imshow(img_rgb)
-    axes[0, 0].set_title('Original Image')
-    axes[0, 0].axis('off')
-
-    axes[0, 1].imshow(probability_map, cmap='gray')
-    axes[0, 1].set_title('Probability Map (White = Likely Coral)')
-    axes[0, 1].axis('off')
-
-    axes[1, 0].imshow(cleaned_mask, cmap='gray')
-    axes[1, 0].set_title('Thresholded Binary Mask')
-    axes[1, 0].axis('off')
-
-    axes[1, 1].imshow(final_output)
-    axes[1, 1].set_title('Final Coral Detection')
-    axes[1, 1].axis('off')
-
-    plt.tight_layout()
-    plt.show()
-
 
 
 # Uncoment the method you want to run
-# process_coral_backprojection('T-101_DHEL-11__DHEL-12_20240802_BROOD.jpg')
 # calibrate_hsv('T-101_DHEL-11__DHEL-12_20240802_BROOD.jpg')
-process_coral_kmeans('T-101_DHEL-11__DHEL-12_20240802_BROOD.JPG')
+# process_coral_kmeans('T-101_DHEL-11__DHEL-12_20240802_BROOD.JPG')
 # process_coral_image('T-101_DHEL-11__DHEL-12_20240802_BROOD.JPG')
 # process_coral_hsv('T-101_DHEL-11__DHEL-12_20240802_BROOD.JPG')
